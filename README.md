@@ -185,37 +185,37 @@ python data/fetch_pipeline.py
 
 This script fetches roughly 1 year of daily data for a NIFTY stock universe and computes basic indicators before writing to the database.
 
-## Hackathon Pitch
+## What is project about?
 
-ChartIQ is built for fast, explainable market intelligence. Instead of showing only indicators or only AI text, it combines both:
+ChartIQ helps users understand market opportunities faster by combining a technical screener, historical signal evidence, and an AI analyst in one product. Instead of forcing users to switch between charts, indicators, and research notes, it gives them a single workflow:
 
-- screen the market quantitatively
-- validate ideas with historical context
-- explain results conversationally
+- discover high-interest NSE stocks through quantitative screening
+- inspect the pattern and confidence behind each signal
+- validate ideas with historical win-rate style evidence
+- ask natural-language questions to understand why a signal matters
 
-That makes it easier for users to move from "What should I look at?" to "Why does this signal matter?"
+The value of the project is not just prediction, but explainability. It turns noisy market data into a more approachable decision-support experience for traders, learners, and retail investors.
 
 ## Demo Flow
 
-For a live demo, you can show:
-
-1. The screener loading live tracked stocks
-2. A stock detail page with confidence and backtest metrics
-3. The chat panel answering a question about a specific symbol
-4. The end-to-end story of data -> signal -> explanation
+1. Start on the screener and show how ChartIQ surfaces tracked NSE symbols with signal type, confidence, dominant pattern, and historical success rate.
+2. Open a stock detail page to show the current price snapshot, AI-generated reasoning, and backtest-style proof metrics across multiple holding periods.
+3. Launch the chat panel and ask a focused question like `Is RELIANCE a good buy?` or `What is the dominant pattern for this stock?`
+4. Close by explaining the full pipeline: market data is ingested, indicators are computed, pattern logic and agent reasoning evaluate the setup, and the frontend turns that into an explainable trading intelligence experience.
 
 ## Current Limitations
 
-- Local setup assumes a working Postgres-compatible database
-- The repo does not yet include a polished root-level environment template
-- Some scripts and schema/setup pieces may still need cleanup for production readiness
-- The frontend currently points to a local backend URL directly
+- The project currently assumes a working Supabase setup and does not yet include a fully polished first-run onboarding flow.
+- Some backend and data-layer pieces still reflect hackathon-stage implementation rather than production-grade reliability and cleanup.
+- The frontend is currently wired to a local backend URL, so environment-based deployment configuration is still a next step.
+- The intelligence layer depends on the current pattern logic, available historical data, and prompt orchestration, which can still be improved for consistency and depth.
 
 ## Future Improvements
 
-- Add authentication and watchlists
-- Support more exchanges and asset classes
-- Improve signal explainability with richer source citations
-- Add live market data streaming
-- Deploy as a hosted demo with managed database setup
+- Add authentication, watchlists, and saved research sessions.
+- Expand coverage beyond the current stock universe into more exchanges and asset classes.
+- Improve reasoning transparency with stronger evidence trails, source-aware explanations, and richer pattern breakdowns.
+- Add live or near-real-time data updates for a more active market view.
+
+
 
