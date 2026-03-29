@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
+from agents.strategist import StrategistAgent
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -111,7 +112,7 @@ class ChatMessage(Base):
     session_id = Column(SQLUUID(as_uuid=True), ForeignKey("chat_sessions.id"))
     role = Column(String)  # user / assistant
     content = Column(Text)
-    metadata = Column(JSONB, nullable=True)
+    message_metadata = Column("metadata", JSONB, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # Create tables on startup
@@ -120,11 +121,12 @@ Base.metadata.create_all(bind=engine)
 # --- LANGGRAPH NODES ---
 
 llm = ChatOpenAI(model="gpt-4o-mini", api_key=OPENAI_API_KEY)
+strategist_agent = StrategistAgent()
 
 def router_node(state: ChatState):
     """
     Node A: Intent Router.
-    Determines if the user query is about a stock, market general, or backtest.
+    Determines if the user query is about the market/stocks or a backtest explanation.
     """
     messages = state["messages"]
     last_message = messages[-1].content
@@ -132,9 +134,9 @@ def router_node(state: ChatState):
     prompt = f"""
     Analyze the user's query and determine the intent.
     Possible intents:
-    1. 'stock_query': Asking about a specific stock's performance, signals, or win rates.
-    2. 'market_general': Asking about general market conditions or advice.
-    3. 'backtest_explanation': Asking about how backtesting or pattern detection works.
+    1. 'market_query': Asking about stocks, market conditions, best picks, or specific tickers.
+    2. 'backtest_explanation': Asking about how backtesting or pattern detection works.
+    3. 'general_chat': Greetings, small talk, or unrelated questions.
     
     User Query: "{last_message}"
     
@@ -144,93 +146,84 @@ def router_node(state: ChatState):
     response = llm.invoke([SystemMessage(content=prompt)])
     intent = response.content.strip().lower()
     
-    # Validation
-    if 'stock' in intent:
-        intent = 'stock_query'
+    if 'market' in intent or 'stock' in intent:
+        intent = 'market_query'
     elif 'backtest' in intent:
         intent = 'backtest_explanation'
     else:
-        intent = 'market_general'
+        intent = 'general_chat'
         
     return {"next_step": intent}
 
-def quant_tool_node(state: ChatState):
+def strategist_node(state: ChatState):
     """
-    Node B: Quant Tool.
-    Queries 'detected_patterns' for the 'symbol_context'.
+    Node B: Strategist Agent.
+    Dynamically decides which tool to call and executes it.
     """
-    db = SessionLocal()
-    symbol = state["symbol_context"]
+    messages = state["messages"]
+    last_message = messages[-1].content
     
-    try:
-        active_signal = db.query(DetectedPattern).filter(
-            DetectedPattern.symbol == symbol,
-            DetectedPattern.is_active == True
-        ).order_by(desc(DetectedPattern.detected_at)).first()
-        
-        dominant_pattern = db.query(DetectedPattern).filter(
-            DetectedPattern.symbol == symbol,
-            DetectedPattern.is_dominant == True
-        ).first()
-        
-        data_str = f"Data for {symbol}:\n"
-        if active_signal:
-            data_str += f"- Current Signal: {active_signal.signal_type} ({active_signal.pattern_name}) at {active_signal.current_price} (Confidence: {active_signal.confidence})\n"
-        else:
-            data_str += "- Current Signal: None\n"
-            
-        if dominant_pattern:
-            data_str += f"- Historical Performance ({dominant_pattern.pattern_name}): Win Rate: {dominant_pattern.win_rate*100:.2f}%, Sharpe: {dominant_pattern.sharpe_ratio:.2f}\n"
-        else:
-            data_str += "- No dominant historical pattern found.\n"
-            
-        raw_json = {
-            "symbol": symbol,
-            "active_signal": {
-                "signal_type": active_signal.signal_type if active_signal else None,
-                "pattern_name": active_signal.pattern_name if active_signal else None,
-                "current_price": active_signal.current_price if active_signal else None,
-                "confidence": active_signal.confidence if active_signal else None
-            },
-            "dominant_pattern": {
-                "pattern_name": dominant_pattern.pattern_name if dominant_pattern else None,
-                "win_rate": dominant_pattern.win_rate if dominant_pattern else None,
-                "sharpe_ratio": dominant_pattern.sharpe_ratio if dominant_pattern else None
-            }
-        }
-            
-        return {"retrieved_data": data_str, "raw_data": raw_json}
-    finally:
-        db.close()
+    # 1. Generate Strategy
+    strategy = strategist_agent.generate_strategy(last_message)
+    print(f"🧠 [Strategist] Thought: {strategy.get('thought')}")
+    
+    # 2. Execute Tool if needed
+    retrieved_data = strategist_agent.execute_strategy(strategy)
+    
+    return {
+        "retrieved_data": retrieved_data,
+        "raw_data": {"strategy": strategy}
+    }
 
 def reasoning_engine_node(state: ChatState):
     """
     Node C: Reasoning Engine.
-    Synthesizes the final response.
+    Synthesizes the final response based on intent.
     """
-    retrieved_data = state.get("retrieved_data", "No specific quantitative data retrieved.")
-    symbol = state["symbol_context"]
+    intent = state.get("next_step", "market_general")
+    retrieved_data = state.get("retrieved_data")
+    symbol = state.get("symbol_context")
     messages = state["messages"]
-    
-    system_prompt = f"""
-    You are a Senior NSE Quant Analyst. 
-    Use the following quantitative data and chat history to provide a professional synthesis.
-    
-    QUANT DATA:
-    {retrieved_data}
-    
-    SYMBOL CONTEXT: {symbol}
-    
-    YOUR RESPONSE MUST FOLLOW THIS STRUCTURE EXACTLY:
-    [Technical Verdict]
-    (BUY/SELL/HOLD based on signals and win rates)
-    
-    [Historical Context]
-    (Details about pattern reliability and past performance)
-    
-    [Chief Analyst Remarks]
-    (Final concluding thoughts in plain English)
-    """
+
+    if intent == "market_query" and retrieved_data:
+        system_prompt = f"""
+        You are a Senior NSE Strategist & Quant Analyst. 
+        Use the following retrieved data and chat history to provide a professional synthesis.
+        
+        RETRIEVED DATA:
+        {retrieved_data}
+        
+        YOUR RESPONSE MUST FOLLOW THIS STRUCTURE:
+        [Market Intelligence Summary]
+        (A brief overview of the scan results. Do NOT use overly cautious language like "lack of conviction". Instead, summarize the dominant directional bias.)
+        
+        [Strategic Verdict]
+        (Provide specific BUY or SELL recommendations for stocks found in the scan. 
+        ALWAYS mention the stock name and its Success Probability (mapped from conviction/win rate).
+        Even if the market is weak, identify the best relative opportunities or high-conviction shorts.)
+        
+        [Evidence & Data]
+        (Explain the technical signals or historical win rates that support your verdict)
+        
+        [Risk Disclosure]
+        (Final concluding thoughts and professional cautionary notes)
+        """
+    elif intent == "backtest_explanation":
+        system_prompt = """
+        You are a Quant Education Specialist.
+        Explain how the NSE Pattern Intel system works:
+        - We use 10 specialized sub-agents (RSI, MACD, Candlesticks, etc.)
+        - We backtest these patterns over 1 year of historical data.
+        - We assign higher weight (Dominant Patterns) to those with the best win rates and Sharpe ratios.
+        - The Chief Agent evaluates all active signals today to give a final verdict.
+        """
+    else:
+        system_prompt = """
+        You are a helpful and professional NSE Market Assistant. 
+        - If the user is greeting you, respond warmly and briefly explain how you can help (analyzing NSE stocks, patterns, and dynamic market scans).
+        - If the user asks general market questions, provide concise, professional insights.
+        - Encourage the user to ask questions like "What are the best stocks right now?" or "Is RELIANCE a good buy?" to trigger the Strategist Agent.
+        """
     
     response = llm.invoke([SystemMessage(content=system_prompt)] + list(messages))
     return {"messages": [AIMessage(content=response.content)]}
@@ -239,26 +232,26 @@ def reasoning_engine_node(state: ChatState):
 
 builder = StateGraph(ChatState)
 builder.add_node("router", router_node)
-builder.add_node("quant_tool", quant_tool_node)
+builder.add_node("strategist", strategist_node)
 builder.add_node("reasoner", reasoning_engine_node)
 
 builder.add_edge(START, "router")
 
 def route_after_intent(state: ChatState):
-    if state["next_step"] == "stock_query":
-        return "quant_tool"
+    if state["next_step"] == "market_query":
+        return "strategist"
     return "reasoner"
 
 builder.add_conditional_edges(
     "router",
     route_after_intent,
     {
-        "quant_tool": "quant_tool",
+        "strategist": "strategist",
         "reasoner": "reasoner"
     }
 )
 
-builder.add_edge("quant_tool", "reasoner")
+builder.add_edge("strategist", "reasoner")
 builder.add_edge("reasoner", END)
 
 graph = builder.compile()
@@ -268,7 +261,7 @@ graph = builder.compile()
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[uuid.UUID] = None
-    symbol_context: str
+    symbol_context: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -301,16 +294,15 @@ def get_db():
 @app.get("/api/stocks")
 def get_stocks(db: Session = Depends(get_db)):
     """
-    Retrieve all 49 unique symbols.
+    Retrieve all unique symbols.
     For each symbol, include its 'is_dominant' pattern stats (win_rate, pattern_name)
-    AND any 'is_active' signal from today.
+    AND any 'is_active' signal (falling back to most recent if none from today).
     """
     # Get all unique symbols from StockPrice
     symbols = db.query(StockPrice.symbol).distinct().all()
     symbols = [s[0] for s in symbols]
     
     result = []
-    today = datetime.now(timezone.utc).date()
     
     for symbol in symbols:
         # Get dominant pattern
@@ -319,23 +311,22 @@ def get_stocks(db: Session = Depends(get_db)):
             DetectedPattern.is_dominant == True
         ).first()
         
-        # Get active signal from today
+        # Get MOST RECENT signal (even if inactive/historical)
         active_signal = db.query(DetectedPattern).filter(
-            DetectedPattern.symbol == symbol,
-            DetectedPattern.is_active == True,
-            func.date(DetectedPattern.detected_at) == today
-        ).first()
+            DetectedPattern.symbol == symbol
+        ).order_by(desc(DetectedPattern.detected_at)).first()
         
         result.append({
             "symbol": symbol,
             "dominant_pattern": {
                 "pattern_name": dominant.pattern_name if dominant else None,
-                "win_rate": dominant.win_rate if dominant else None
+                "win_rate": (dominant.win_rate * 100) if dominant and dominant.win_rate else 0
             },
             "active_signal": {
                 "pattern_name": active_signal.pattern_name if active_signal else None,
                 "signal_type": active_signal.signal_type if active_signal else None,
-                "confidence": active_signal.confidence if active_signal else None
+                "confidence": (active_signal.confidence * 100) if active_signal and active_signal.confidence else 0,
+                "detected_at": active_signal.detected_at.isoformat() if active_signal.detected_at else None
             } if active_signal else None
         })
         
@@ -446,7 +437,7 @@ def post_chat(request: ChatRequest, db: Session = Depends(get_db)):
         session_id=session_id,
         role="assistant",
         content=ai_response_text,
-        metadata={"retrieved_data": retrieved_data} # Store what was used for reasoning
+        message_metadata={"retrieved_data": retrieved_data} # Store what was used for reasoning
     )
     db.add(user_msg)
     db.add(assistant_msg)

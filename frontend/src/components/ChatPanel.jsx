@@ -79,6 +79,38 @@ const ChatMessageItem = ({ msg }) => {
   );
 };
 
+const LoadingState = () => {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const messages = [
+    "Refining Signal...",
+    "Analyzing Patterns...",
+    "Strategizing Entry...",
+    "Evaluating Risk...",
+    "Finalizing Intelligence..."
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % messages.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-2 items-start animate-fade-in">
+      <div className="flex items-center gap-2 text-[10px] font-black text-buy uppercase tracking-widest transition-all duration-500">
+        <Sparkles size={10} className="animate-pulse" />
+        {messages[messageIndex]}
+      </div>
+      <div className="bg-card/50 border border-white/5 p-4 rounded-2xl rounded-tl-none w-32 h-12 flex items-center justify-center gap-1.5 shadow-xl backdrop-blur-sm">
+        <div className="w-1.5 h-1.5 bg-buy rounded-full animate-bounce [animation-delay:-0.3s] shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+        <div className="w-1.5 h-1.5 bg-buy rounded-full animate-bounce [animation-delay:-0.15s] shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+        <div className="w-1.5 h-1.5 bg-buy rounded-full animate-bounce shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+      </div>
+    </div>
+  );
+};
+
 const ChatPanel = ({ symbolContext, isOpen, setIsOpen }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -100,7 +132,7 @@ const ChatPanel = ({ symbolContext, isOpen, setIsOpen }) => {
     setIsLoading(true);
 
     try {
-      const response = await sendChatMessage(input, "session-v1", symbolContext);
+      const response = await sendChatMessage(input, null, symbolContext);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: response?.response || "No analysis available for this query.",
@@ -120,20 +152,18 @@ const ChatPanel = ({ symbolContext, isOpen, setIsOpen }) => {
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "fixed top-1/2 -translate-y-1/2 glass p-1.5 rounded-l-xl border-y border-l border-white/10 z-[60] transition-all duration-300 group",
-          isOpen ? "right-[450px]" : "right-0 shadow-[0_0_20px_rgba(34,197,94,0.1)]"
-        )}
-      >
-        <div className={cn(
-          "bg-white/5 p-2 rounded-lg transition-colors group-hover:bg-buy/10 group-hover:text-buy",
-          !isOpen && "animate-pulse border border-buy/20"
-        )}>
-          {isOpen ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}
-        </div>
-      </button>
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-8 right-8 z-[60] bg-buy text-black p-4 rounded-full shadow-[0_10px_40px_rgba(34,197,94,0.3)] hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
+          title="Ask AI Assistant"
+        >
+          <Bot size={28} className="group-hover:animate-bounce" />
+          <span className="absolute -top-12 bg-card text-white text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 whitespace-nowrap shadow-xl">
+            Ask AI Assistant
+          </span>
+        </button>
+      )}
 
       <div className={cn(
         "fixed right-0 top-0 h-screen w-[450px] bg-background border-l border-white/10 z-50 transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1) flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)]",
@@ -187,18 +217,7 @@ const ChatPanel = ({ symbolContext, isOpen, setIsOpen }) => {
             <ChatMessageItem key={i} msg={msg} />
           ))}
           
-          {isLoading && (
-            <div className="flex flex-col gap-2 items-start animate-pulse">
-              <div className="flex items-center gap-2 text-[10px] font-black text-buy uppercase tracking-widest">
-                Refining Signal...
-              </div>
-              <div className="bg-card/50 border border-white/5 p-4 rounded-2xl rounded-tl-none w-32 h-12 flex items-center justify-center gap-1">
-                <div className="w-1.5 h-1.5 bg-buy rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="w-1.5 h-1.5 bg-buy rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="w-1.5 h-1.5 bg-buy rounded-full animate-bounce" />
-              </div>
-            </div>
-          )}
+          {isLoading && <LoadingState />}
         </div>
 
         {/* Input Area */}

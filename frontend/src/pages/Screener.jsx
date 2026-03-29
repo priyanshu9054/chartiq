@@ -149,28 +149,37 @@ const Screener = () => {
                         </div>
                       </td>
                       <td className="px-8 py-6">
-                        <SignalBadge signal={stock.final_signal} />
+                        <SignalBadge signal={stock.active_signal?.signal_type || '-'} />
                       </td>
                       <td className="px-8 py-6">
                         <div className="flex flex-col gap-2">
                           <div className="flex justify-between items-end">
-                            <span className="text-[10px] text-gray-500 font-bold uppercase">Reliability</span>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Reliability</span>
+                              {stock.active_signal?.detected_at && (
+                                <span className="text-[8px] text-gray-600 font-bold uppercase">
+                                  {new Date(stock.active_signal.detected_at).toLocaleDateString() !== new Date().toLocaleDateString() 
+                                    ? `Last: ${new Date(stock.active_signal.detected_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` 
+                                    : 'Live'}
+                                </span>
+                              )}
+                            </div>
                             <span className={cn(
                               "text-xs font-black",
-                              stock.confidence > 70 ? "text-buy" : stock.confidence > 40 ? "text-yellow-500" : "text-sell"
-                            )}>{stock.confidence}%</span>
+                              !stock.active_signal ? "text-gray-600" : stock.active_signal.confidence > 70 ? "text-buy" : stock.active_signal.confidence > 40 ? "text-yellow-500" : "text-sell"
+                            )}>{stock.active_signal?.confidence || 0}%</span>
                           </div>
-                          <ConfidenceBar value={stock.confidence} />
+                          <ConfidenceBar value={stock.active_signal?.confidence || 0} />
                         </div>
                       </td>
                       <td className="px-8 py-6">
                         <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">
-                          {stock.dominant_pattern || "Evaluating..."}
+                          {(stock.dominant_pattern && typeof stock.dominant_pattern === 'object' ? stock.dominant_pattern.pattern_name : stock.dominant_pattern) || "Evaluating..."}
                         </span>
                       </td>
                       <td className="px-8 py-6 text-right">
                         <span className="text-xl font-black text-white tabular-nums">
-                          {stock.historical_win_rate}%
+                          {stock.historical_win_rate || (stock.dominant_pattern && stock.dominant_pattern.win_rate ? stock.dominant_pattern.win_rate : "0")}%
                         </span>
                       </td>
                     </tr>

@@ -10,8 +10,13 @@ You will receive:
 2. Current price and key indicator values
 3. A list of signals detected by various sub-agents (RSI, EMA, MACD, Candlestick patterns, etc.)
 
-Your goal is to synthesize these signals, weighing their confidence and remarks, to determine if the stock is a BUY, SELL, or HOLD.
-Be conservative. If signals are conflicting or low confidence, default to HOLD.
+Your goal is to synthesize these signals to determine if the stock is a BUY, SELL, or HOLD.
+Avoid staying neutral unless the signals are completely non-existent. Even in ambiguous markets, identify the "most likely" direction (BUY or SELL) based on the balance of evidence. 
+
+The "conviction" score you provide will be used as a "Success Probability" for the user. 
+- If you see a slight edge for a BUY, recommend BUY with a representative conviction (e.g., 0.55 or 0.60).
+- If signals are bearish, recommend SELL.
+- Only use HOLD if there is absolutely no data or the stock is completely flat.
 
 Response MUST be in JSON format only with the following keys:
 {
@@ -40,7 +45,7 @@ def evaluate_signals(symbol: str, signals: list[dict], latest_bar: dict, market_
     # Regime-aware instructions
     regime_instruction = ""
     if market_regime == "BEARISH":
-        regime_instruction = "\n⚠️ MARKET REGIME: BEARISH. Be extra conservative on BUY signals. Require conviction > 0.75 for any BUY recommendation.\n"
+        regime_instruction = "\n⚠️ MARKET REGIME: BEARISH. While caution is advised, identify the strongest relative candidates for BUY or SELL actions.\n"
     
     user_prompt = f"""
     Stock: {symbol}
