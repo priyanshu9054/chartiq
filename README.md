@@ -219,15 +219,3 @@ For a live demo, you can show:
 - Add live market data streaming
 - Deploy as a hosted demo with managed database setup
 
-## Team Notes
-
-If you are submitting this in a hackathon, consider adding:
-
-- team members
-- challenge track
-- demo video link
-- slides or architecture diagram
-
-## License
-
-Add your preferred license here before publishing publicly.
